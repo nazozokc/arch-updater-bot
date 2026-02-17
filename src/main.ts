@@ -40,6 +40,7 @@ async function hasFlakeChanged() {
     "flake.lock",
   ]);
 
+  return output.trim().length > 0;
 }
 
 async function main() {
@@ -48,11 +49,20 @@ async function main() {
   await acquireLock();
 
   try {
-    consola.start("Running arch update");
-    await run(["sudo", "pacman", "--Syu"]);
-    consola.success("arch update finished");
+    consola.start("Running arch update...");
+    await run(["sudo", "pacman", "-Syu"]);
+    consola.success("Nix update finished");
+
+    if (await hasFlakeChanged()) {
+      consola.info("good");
+    } else {
+      consola.info("No good");
+    }
+  } finally {
+    await releaseLock();
+    consola.info("Bot finished");
   }
-};
+}
 
 main().catch((err) => {
   consola.fatal(err);
