@@ -1,26 +1,24 @@
-import fs from "fs";
-import consola from "consola";
+import * as fs from "fs";
+import * as path from "path";
 
-const LOCK_FILE = ".nix-bot.lock";
+const LOCK_FILE = path.join(process.cwd(), ".updater.lock");
 
-export async function acquireLock() {
+export function isLocked(): boolean {
   try {
-    await fs.writeFile(
-      LOCK_FILE,
-      Date.now().toString(),
-      { flag: "wx" } // 既に存在したらエラー
-    );
-  } catch (err) {
-    if (err.code === "EEXIST") {
-      consola.error("Bot already running.");
-      process.exit(1);
-    }
-    throw err;
+    return fs.existsSync(LOCK_FILE);
+  } catch {
+    return false;
   }
 }
 
-export async function releaseLock() {
+export function createLock(): void {
+  fs.writeFileSync(LOCK_FILE, Date.now().toString());
+}
+
+export function removeLock(): void {
   try {
-    await fs.unlink(LOCK_FILE);
-  } catch {}
+    fs.unlinkSync(LOCK_FILE);
+  } catch {
+    // ignore
+  }
 }

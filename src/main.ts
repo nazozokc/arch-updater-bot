@@ -1,71 +1,83 @@
-import { spawn } from "node:child_process";
-import consola from "consola";
-import { acquireLock, releaseLock } from "./lock.js";
+import * as child_process from "child_process";
+import * as console from "console";
 
-async function run(cmd) {
-  consola.debug(`Running: ${cmd.join(" ")}`);
+function runCommand(command: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    console.log(`Running: ${command}`);
+    console.log("---");
 
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd[0], cmd.slice(1), {
-      stdio: ["ignore", "pipe", "pipe"],
+    const child = child_process.exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error: ${error.message}`);
+        resolve(false);
+        return;
+      }
+      resolve(true);
     });
 
-    let stdout = "";
-    let stderr = "";
-
-    p.stdout.on("data", (d) => {
-      stdout += d.toString();
+    child.stdout?.on("data", (data) => {
+      process.stdout.write(data);
     });
 
-    p.stderr.on("data", (d) => {
-      stderr += d.toString();
+    child.stderr?.on("data", (data) => {
+      process.stderr.write(data);
     });
 
-    p.on("close", (code) => {
-      if (code !== 0) {
-        consola.error(stderr);
-        reject(new Error(`Command failed: ${cmd.join(" ")}`));
+    child.on("close", (code) => {
+      if (code === 0) {
+        console.log(`Command succeeded with code ${code}`);
       } else {
-        resolve(stdout);
+        console.error(`Command failed with code ${code}`);
+        resolve(false);
       }
     });
   });
 }
 
-async function hasFlakeChanged() {
-  const output = await run([
-    "git",
-    "status",
-    "--porcelain",
-    "flake.lock",
-  ]);
-
-  return output.trim().length > 0;
+async function checkCommandExists(command: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    child_process.exec(`command -v ${command} >/dev/null 2>&1`, (error) => {
+      resolve(error === null);
+    });
+  });
 }
 
-async function main() {
-  consola.info("Nix update bot started");
+async function main(): Promise<void> {
+  console.log("Starting Arch Linux updater...");
 
-  await acquireLock();
-
-  try {
-    consola.start("Running arch update...");
-    await run(["sudo", "pacman", "-Syu"]);
-    consola.success("Nix update finished");
-
-    if (await hasFlakeChanged()) {
-      consola.info("good");
-    } else {
-      consola.info("No good");
-    }
-  } finally {
-    await releaseLock();
-    consola.info("Bot finished");
+  const pacmanExists = await checkCommandExists("pacman");
+  if (!pacmanExists) {
+    console.log("command not found: pacman");
+    console.log("Done.");
+    return;
   }
+
+  const yayExists = await checkCommandExists("yay");
+
+  // Run sudo pacman -Syu
+  const pacmanSuccess = await runCommand("sudo pacman -Syu");
+  if (!pacmanSuccess) {
+    console.error("pacman update failed");
+    console.log("Done.");
+    return;
+  }
+
+  // Run yay -Syu if yay exists
+  if (yayExists) {
+    const yaySuccess = await runCommand("yay -Syu");
+    if (!yaySuccess) {
+      console.error("yay update failed");
+      console.log("Done.");
+      return;
+    }
+  } else {
+    console.log("command not found: yay");
+  }
+
+  console.log("Done.");
 }
 
-main().catch((err) => {
-  consola.fatal(err);
+main().catch((error) => {
+  console.error("Fatal error:", error);
   process.exit(1);
 });
-
