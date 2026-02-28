@@ -1,3 +1,7 @@
+# 最初にやること
+`/home/nazozokc/agents/CLAUDE.md`
+上を読み込んでください
+
 # やりたいこと
 私は、arch linuxを自動アップデートするためのbotを作りたいです
 
